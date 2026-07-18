@@ -7,6 +7,14 @@ import {
   ButtonStyle,
 } from 'discord.js';
 import axios from 'axios';
+import express from 'express';
+
+// ── Express keep-alive server (required for Render) ───────────────────────────
+const app = express();
+app.get('/', (_req, res) => res.send('Nexus Shop Bot is online!'));
+app.listen(process.env.PORT || 3000, () => {
+  console.log(`[Web] Keep-alive server listening on port ${process.env.PORT || 3000}`);
+});
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const SELLAUTH_API_URL = 'https://api.sellauth.com/v1/shops/251017/products';
@@ -15,10 +23,9 @@ const PING_ROLE_ID      = '1527716607781113866';
 const SHOP_BASE_URL     = 'https://nexus5.mysellauth.com';
 const POLL_INTERVAL_MS  = 30_000;
 
-// ── In-memory stock store  ────────────────────────────────────────────────────
-// Map<productId, stockQuantity>
+// ── In-memory stock store ─────────────────────────────────────────────────────
 const previousStock = new Map();
-let initialised = false; // skip alerts on the very first fetch
+let initialised = false;
 
 // ── Discord client ────────────────────────────────────────────────────────────
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
@@ -26,12 +33,8 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 // ── SellAuth polling ──────────────────────────────────────────────────────────
 async function fetchProducts() {
   const { data } = await axios.get(SELLAUTH_API_URL, {
-    headers: {
-      Authorization: `Bearer ${process.env.SELLAUTH_API_KEY}`,
-    },
+    headers: { Authorization: `Bearer ${process.env.SELLAUTH_API_KEY}` },
   });
-
-  // API may return { data: [...] } or a plain array — handle both
   return Array.isArray(data) ? data : (data.data ?? []);
 }
 
@@ -54,7 +57,7 @@ async function checkRestock() {
 
     previousStock.set(id, stock);
 
-    if (!initialised) continue; // seed only on first run
+    if (!initialised) continue;
 
     if (stock > prev) {
       console.log(`[Restock] ${name}: ${prev} → ${stock}`);
@@ -76,18 +79,18 @@ async function sendRestockAlert(name, product, prevStock, newStock) {
     return;
   }
 
-  const price   = product.variants?.[0]?.price ?? 'N/A';
-  const added   = newStock - prevStock;
+  const price    = product.variants?.[0]?.price ?? 'N/A';
+  const added    = newStock - prevStock;
   const imageUrl = product.images?.[0]?.url ?? product.image_url ?? product.image ?? null;
 
   const embed = new EmbedBuilder()
     .setColor(0xff2d2d)
     .setTitle(`<a:notificationbell:1526892504031563846> **${name} RESTOCKED!**`)
     .addFields(
-      { name: '<:ns_product:1523225961401942047> PRODUCT', value: `\`\`\`${name}\`\`\``,              inline: false },
-      { name: '<:ns_buy:1525692198379847873> PRICE',       value: `\`\`\`${Number(price).toFixed(2)}\`\`\``, inline: false },
-      { name: '<:ns_rules:1523225693935374487> STOCK',     value: `\`\`\`${newStock} units\`\`\``,    inline: false },
-      { name: '<:ns_like:1525692129622364271> ADDED',      value: `\`\`\`+${added} units\`\`\``,      inline: false },
+      { name: '<:ns_product:1523225961401942047> PRODUCT', value: `\`\`\`${name}\`\`\``,                       inline: false },
+      { name: '<:ns_buy:1525692198379847873> PRICE',       value: `\`\`\`$${Number(price).toFixed(2)}\`\`\``,  inline: false },
+      { name: '<:ns_rules:1523225693935374487> STOCK',     value: `\`\`\`${newStock} units\`\`\``,             inline: false },
+      { name: '<:ns_like:1525692129622364271> ADDED',      value: `\`\`\`+${added} units\`\`\``,               inline: false },
     )
     .setTimestamp()
     .setFooter({
